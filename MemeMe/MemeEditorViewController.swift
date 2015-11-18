@@ -7,6 +7,7 @@
 //
 
 import UIKit
+import CoreData
 
 class MemeEditorViewController: UIViewController, UITextFieldDelegate, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
     
@@ -21,6 +22,7 @@ class MemeEditorViewController: UIViewController, UITextFieldDelegate, UIImagePi
     var index:Int!
     var memedImage:UIImage!
     var meme:Meme!
+    var memes = [Meme]()
     var editingExisting = false as Bool
     let topText = "TOP"
     let bottomText = "BOTTOM"
@@ -32,7 +34,7 @@ class MemeEditorViewController: UIViewController, UITextFieldDelegate, UIImagePi
     ]
 
     override func viewDidLoad() {
-        super.viewDidLoad()
+        super.viewDidLoad()        
         
         //Disable the camera button if the device does not have a camera
         cameraButton.enabled = UIImagePickerController.isSourceTypeAvailable(UIImagePickerControllerSourceType.Camera)
@@ -72,6 +74,10 @@ class MemeEditorViewController: UIViewController, UITextFieldDelegate, UIImagePi
             bottomTextField.text = meme.bottomText
             shareButton.enabled = true
         }
+    }
+    
+    var sharedContext: NSManagedObjectContext {
+        return CoreDataStackManager.sharedInstance().managedObjectContext
     }
     
     override func viewWillDisappear(animated: Bool) {
@@ -116,7 +122,7 @@ class MemeEditorViewController: UIViewController, UITextFieldDelegate, UIImagePi
         self.presentViewController(imagePicker, animated: true, completion: nil)
     }
     
-    func imagePickerController(picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [NSObject : AnyObject]) {
+    func imagePickerController(picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [String : AnyObject]) {
         if let image = info[UIImagePickerControllerOriginalImage] as? UIImage {
             self.chosenImageView.image = image
         }
@@ -174,35 +180,55 @@ class MemeEditorViewController: UIViewController, UITextFieldDelegate, UIImagePi
     }
     
     func save() {
-        //Create the meme
-        var meme = Meme( topText:topTextField.text, bottomText:bottomTextField.text , image:
-            chosenImageView.image!, memedImage:generateMemedImage() )
+        print("hello")
+        let dictionary: [String : AnyObject] = [
+            Meme.Keys.TopText : topTextField.text!,
+            Meme.Keys.BottomText : bottomTextField.text!,
+            Meme.Keys.ImagePath : chosenImageView.image!,
+            Meme.Keys.MemedImagePath : generateMemedImage()
+        ]
         
-        // Add it to the memes array in the Application Delegate
-        let object = UIApplication.sharedApplication().delegate
-        let appDelegate = object as! AppDelegate
-        appDelegate.memes.append(meme)
-        println(appDelegate.memes.count)
+        // Now we create a new Meme, using the shared Context
+        let memeToBeAdded = Meme(dictionary: dictionary, context: sharedContext)
+        
+        
+        self.memes.append(memeToBeAdded)
+        
+        print(memes.count)
+        
+        // Finally we save the shared context, using the convenience method in
+        // The CoreDataStackManager
+        CoreDataStackManager.sharedInstance().saveContext()
     }
     
     @IBAction func share() {
         self.resignKeyboards()
         let activityItem:UIImage! = generateMemedImage()
         let activityView = UIActivityViewController(activityItems: [activityItem], applicationActivities: nil)
-        activityView.completionWithItemsHandler = activityComletionHandler
+        self.save()
+       // activityView.completionWithItemsHandler = doneSharingHandler
         presentViewController(activityView, animated: true, completion: nil)
     }
     
+    
+    func doneSharingHandler(activityType: String!, completed: Bool, returnedItems: [AnyObject]!, error: NSError!) {
+        // Return if cancelled
+        if (!completed) {
+            return
+        }
+        
+        // If here, log which activity occurred
+       // println("Shared video activity: \(activityType)")
+    }
 
     
-    func activityComletionHandler(activityType: String!,
-        completed: Bool,
-        returnedItems: [AnyObject]!,
-        activityError: NSError!) {
+    func activityComletionHandler(activityType: String!, completed: Bool, returnedItems: [AnyObject]!, activityError: NSError!) {
             if activityError == nil && completed {
                 self.save()
                 self.dismissViewControllerAnimated(true, completion: nil)
-                println("dissmissed activity view")
+                print("dissmissed activity view")
+            } else {
+                print(activityError)
             }
     }
     
@@ -213,7 +239,7 @@ class MemeEditorViewController: UIViewController, UITextFieldDelegate, UIImagePi
         self.toolBar.hidden = true
         
         // Render view to an image
-        UIGraphicsBeginImageContext(self.view.frame.size)
+        UIGraphicsBeginImageContextWithOptions(self.view.frame.size, true, 4.0)
         self.view.drawViewHierarchyInRect(self.view.frame,
             afterScreenUpdates: true)
         let memedImage : UIImage =
@@ -233,17 +259,38 @@ class MemeEditorViewController: UIViewController, UITextFieldDelegate, UIImagePi
         
         //Save the changes to the meme that has been edited
         if let memeIndex = index as Int! {
-            let object = UIApplication.sharedApplication().delegate
-            let appDelegate = object as! AppDelegate
-            if let meme = appDelegate.memes[memeIndex] as Meme! {
+            let memes = fetchAllMemes()
+            if let meme = memes[memeIndex] as Meme! {
                 meme.topText = topTextField.text
                 meme.bottomText = bottomTextField.text
                 meme.image = chosenImageView.image
                 meme.memedImage = generateMemedImage()
                 self.dismissViewControllerAnimated(true, completion: nil)
+                CoreDataStackManager.sharedInstance().saveContext()
             } else {
-                println("Error editing meme")
+                print("Error editing meme")
             }
+        }
+    }
+
+    
+    /**
+     * This is the convenience method for fetching all persistent memes.
+     *
+     * The method creates a "Fetch Request" and then executes the request on
+     * the shared context.
+     */
+    func fetchAllMemes() -> [Meme] {
+        
+        // Create the Fetch Request
+        let fetchRequest = NSFetchRequest(entityName: "Meme")
+        
+        // Execute the Fetch Request
+        do {
+            return try sharedContext.executeFetchRequest(fetchRequest) as! [Meme]
+        } catch  let error as NSError {
+            print("Error in fetchAllMemes(): \(error)")
+            return [Meme]()
         }
     }
     

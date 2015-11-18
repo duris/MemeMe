@@ -7,6 +7,7 @@
 //
 
 import UIKit
+import CoreData
 
 class MemeTableViewController: UITableViewController {
     
@@ -20,8 +21,11 @@ class MemeTableViewController: UITableViewController {
     }
     
     override func viewWillAppear(animated: Bool) {
-        loadMemes()
+        memes = fetchAllMemes()
+        tableView.reloadData()
+        navigationItem.leftBarButtonItem = editButtonItem()
         self.tabBarController?.tabBar.hidden = false
+        tableView.editing = false
     }
     
     
@@ -32,7 +36,8 @@ class MemeTableViewController: UITableViewController {
     override func tableView(tableView: UITableView, cellForRowAtIndexPath indexPath: NSIndexPath) -> UITableViewCell {
         //Setup cell data
         let cell = tableView.dequeueReusableCellWithIdentifier("MemeCell") as! MemeTableViewCell
-        cell.topText.text = memes[indexPath.row].topText
+        let meme = memes[indexPath.row]
+        cell.topText.text = meme.topText as String
         cell.bottomText.text = memes[indexPath.row].bottomText
         cell.memeImageView.image = memes[indexPath.row].memedImage
         
@@ -60,34 +65,52 @@ class MemeTableViewController: UITableViewController {
         presentViewController(nav, animated: true, completion: nil)
     }
     
-    override func tableView(tableView: UITableView, editActionsForRowAtIndexPath indexPath: NSIndexPath) -> [AnyObject]? {
-       
-        var deleteAction = UITableViewRowAction(style: .Default, title: "Delete", handler: {
-            (action:UITableViewRowAction!, indexPath:NSIndexPath!) -> Void in
+
+    
+    override func tableView(tableView: UITableView, commitEditingStyle editingStyle: UITableViewCellEditingStyle, forRowAtIndexPath indexPath: NSIndexPath) {
+        //Allow editing of cell
+        switch (editingStyle) {
+        case .Delete:
+            let meme = self.memes[indexPath.row]
             
-            //Delete memes from data source
-            let object = UIApplication.sharedApplication().delegate
-            let appDelegate = object as! AppDelegate
-            appDelegate.memes.removeAtIndex(indexPath.row)
             self.memes.removeAtIndex(indexPath.row)
             
             //Delete row
             self.tableView.deleteRowsAtIndexPaths([indexPath], withRowAnimation: .Fade)
-        })
+            
+            sharedContext.deleteObject(meme)
+            CoreDataStackManager.sharedInstance().saveContext()
+        default:
+            break
+        }
+    }
+    
+    
+    // MARK: - Core Data Convenience. This will be useful for fetching. And for adding and saving objects as well.
+    
+    var sharedContext: NSManagedObjectContext {
+        return CoreDataStackManager.sharedInstance().managedObjectContext
+    }
+    
+    
+    /**
+     * This is the convenience method for fetching all persistent Memes.
+     *
+     * The method creates a "Fetch Request" and then executes the request on
+     * the shared context.
+     */
+    func fetchAllMemes() -> [Meme] {
         
-        return [deleteAction]
-    }
-    
-    override func tableView(tableView: UITableView, commitEditingStyle editingStyle: UITableViewCellEditingStyle, forRowAtIndexPath indexPath: NSIndexPath) {
-        //Allow editing of cell
-    }
-    
-    func loadMemes() {
-        //Get meme data from the app delegate
-        let object = UIApplication.sharedApplication().delegate
-        let appDelegate = object as! AppDelegate
-        self.memes = appDelegate.memes
-        self.tableView.reloadData()
+        // Create the Fetch Request
+        let fetchRequest = NSFetchRequest(entityName: "Meme")
+        
+        // Execute the Fetch Request
+        do {
+            return try sharedContext.executeFetchRequest(fetchRequest) as! [Meme]
+        } catch  let error as NSError {
+            print("Error in fetchAllMemes(): \(error)")
+            return [Meme]()
+        }
     }
     
 

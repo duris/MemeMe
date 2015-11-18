@@ -8,17 +8,38 @@
 
 import Foundation
 import UIKit
+import CoreData
 
-class Meme: NSObject{
-    var topText:String!
-    var bottomText:String!
-    var image:UIImage!
-    var memedImage:UIImage!
+class Meme: NSManagedObject{
     
-    init(topText:String, bottomText:String, image:UIImage, memedImage:UIImage ){
-        self.topText = topText
-        self.bottomText = bottomText
-        self.image = image
-        self.memedImage = memedImage
+    struct Keys {
+        static let TopText = "top_text"
+        static let BottomText = "bottom_text"
+        static let ImagePath = "image_path"
+        static let MemedImagePath = "memed_image_path"
     }
+    
+    @NSManaged var topText:String!
+    @NSManaged var bottomText:String!
+    @NSManaged var image:UIImage!
+    @NSManaged var memedImage:UIImage!
+    
+    override init(entity: NSEntityDescription, insertIntoManagedObjectContext context: NSManagedObjectContext?) {
+        super.init(entity: entity, insertIntoManagedObjectContext: context)
+    }
+    
+    init(dictionary: [String : AnyObject], context: NSManagedObjectContext) {
+        
+        // Core Data
+        let entity =  NSEntityDescription.entityForName("Meme", inManagedObjectContext: context)!
+        super.init(entity: entity, insertIntoManagedObjectContext: context)
+        
+        // Dictionary
+        topText = dictionary[Keys.TopText] as! String
+        bottomText = dictionary[Keys.BottomText] as! String
+        image = dictionary[Keys.ImagePath] as? UIImage
+        memedImage = dictionary[Keys.MemedImagePath] as? UIImage
+    }
+    
+    
 }
